@@ -8,7 +8,9 @@ enum {
     PERMUTATIONS = 5040,
     ORIENTATIONS = 729,
     MOVES = 9,
-    PO_STATES = 45360
+    PO_STATES = 45360,
+    /* one cubie: (pos << 2) | ori, pos 0~6, ori 0~2 (ori == 3 unused) */
+    CUBIE_STATES = 28
 };
 
 typedef struct {
@@ -89,6 +91,8 @@ static inline uint32_t rank_po(const state_t *state)
 
 static uint16_t orientation[3][ORIENTATIONS];
 static uint16_t permutation[3][PERMUTATIONS];
+/* cubie_move[face][(pos << 2) | ori] = (new_pos << 2) | new_ori for one cubie */
+static uint8_t cubie_move[3][CUBIE_STATES];
 static uint8_t dist_o[ORIENTATIONS];
 static uint8_t dist_po[PO_STATES];
 
@@ -110,6 +114,19 @@ int main(void)
         for (uint8_t face = 0; face < 3; ++face) {
             state_t next = quarter_turn(state, face);
             permutation[face][rank] = (uint16_t)(rank_state(&next) / ORIENTATIONS);
+        }
+    }
+
+    puts("Building Single-Cubie Transition Table...");
+    for (uint8_t face = 0; face < 3; ++face) {
+        for (uint8_t pos = 0; pos < CUBIES; ++pos) {
+            uint8_t new_pos = 0;
+            while (source[face][new_pos] != pos)
+                ++new_pos;
+            for (uint8_t ori = 0; ori < 3; ++ori) {
+                uint8_t new_ori = (uint8_t)((ori + twist[face][new_pos]) % 3U);
+                cubie_move[face][(pos << 2) | ori] = (uint8_t)((new_pos << 2) | new_ori);
+            }
         }
     }
 
@@ -208,7 +225,18 @@ int main(void)
     }
     fprintf(fp, "};\n\n");
 
-    /* 4. dist_po */
+    /* 4. cubie_move */
+    fprintf(fp, "/* cubie_move[face][(pos << 2) | ori] = (new_pos << 2) | new_ori */\n");
+    fprintf(fp, "static const uint8_t cubie_move[3][%d] = {\n", CUBIE_STATES);
+    for (int face = 0; face < 3; ++face) {
+        fprintf(fp, "  {");
+        for (int i = 0; i < CUBIE_STATES; ++i)
+            fprintf(fp, "%u, ", cubie_move[face][i]);
+        fprintf(fp, "},\n");
+    }
+    fprintf(fp, "};\n\n");
+
+    /* 5. dist_po */
     fprintf(fp, "static const uint8_t dist_po[%d] = {\n", PO_STATES);
     for (int i = 0; i < PO_STATES; ++i) {
         fprintf(fp, "%u, ", dist_po[i]);
